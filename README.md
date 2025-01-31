@@ -61,7 +61,7 @@ The Jimmer Timer features a quote widget that displays inspirational quotes. The
 ## Audio
 ------
 
-The Jimmer Timer plays audio during the timer (loop and end sounds). You can customize the audio by providing your own audio files , they shall be in the ``current working directory`` and there shall be 2 files - ``audio.mp3`` and ``end.mp3`` , atleast ``audio.mp3`` shall be there
+The Jimmer Timer plays audio during the timer (loop and end sounds). You can customize the audio by providing your own audio files , they shall be in the ``current working directory`` and there shall be 2 files - ``audio.mp3`` and ``end.mp3``  , by default jimmer installation will ship with audio.mp3 and places it at ``/usr/local/bin`` but it also looks for one in current dir, atleast ``audio.mp3`` shall be there
 
 ## Contributing
 ------------
