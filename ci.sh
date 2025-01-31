@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # URL to download the jimmer binary
-JIMMER_URL="https://example.com/path/to/jimmer-linux-gnu-x86_64"
+JIMMER_URL="https://github.com/skubed0007/jimmer/blob/master/bin/jimmer-linux-gnu-x86_64"
 
 # Check for root privileges
 if [ "$EUID" -ne 0 ]; then

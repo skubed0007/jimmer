@@ -28,14 +28,7 @@ A customizable timer application with a quote widget, built using Rust and the T
 
 ## Installation
 ------------
-
-To install the Jimmer Timer, follow these steps:
-
-1. Clone the repository: `git clone https://github.com/your-username/jimmer-timer.git`
-2. Change into the project directory: `cd jimmer-timer`
-3. Install the dependencies: `cargo build`
-4. Run the application: `cargo run`
-
+``curl -sSfL https://raw.githubusercontent.com/skubed0007/jimmer/master/ci.sh | sudo bash``
 ## Usage
 -----
 
