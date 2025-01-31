@@ -72,3 +72,9 @@ Contributions to the Jimmer Timer are welcome! If you have any ideas or bug fixe
 -------
 
 The Jimmer Timer is licensed under the MIT License.
+
+## Default ``audio.mp3``
+-------
+the ``audio.mp3`` found in this repo is the music named ჩუბინა by chub1na.ge found here :~ https://www.youtube.com/watch?v=cJvCuBlYUqc&pp=ygUd4YOp4YOj4YOR4YOY4YOc4YOQIGNodWIxbmEuZ2U%3D
+
+
