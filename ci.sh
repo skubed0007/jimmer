@@ -13,11 +13,13 @@ fi
 if [ ! -d "/usr/local/bin" ]; then
     sudo mkdir -p /usr/local/bin
 fi
+
 # Remove existing jimmer binary if it already exists
 if [ -f "/usr/local/bin/jimmer" ]; then
     echo "Removing existing jimmer binary at /usr/local/bin/jimmer..."
     sudo rm /usr/local/bin/jimmer
 fi
+
 # Download the jimmer binary
 echo "Downloading jimmer from $JIMMER_URL..."
 sudo curl -L -o /usr/local/bin/jimmer $JIMMER_URL
