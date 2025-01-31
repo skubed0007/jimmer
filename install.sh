@@ -10,6 +10,10 @@ fi
 if [ ! -d "/usr/local/bin" ]; then
     sudo mkdir -p /usr/local/bin
 fi
+if [ -f "/usr/local/bin/jimmer" ]; then
+    echo "Removing existing jimmer binary at /usr/local/bin/jimmer..."
+    sudo rm /usr/local/bin/jimmer
+fi
 
 # Copy the jimmer-linux-gnu-x86_64 file to /usr/local/bin
 sudo cp jimmer-linux-gnu-x86_64 /usr/local/bin/jimmer
