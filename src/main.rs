@@ -104,7 +104,6 @@ const QUOTES: &[&str] = &[
     "Later the comforting lie deceives, later harsh truth relieves",
     "Later the sweet illusion shatters, later reality truly matters",
 ];
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.contains(&"-h".to_string()) || args.contains(&"--help".to_string()) {
@@ -119,32 +118,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let theme = get_theme_from_args(&args)?;
+
     let audio_path = "audio.mp3";
-let end_path = "end.mp3";
+    let end_path = "end.mp3";
 
-let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-let exe_path = env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
-let exe_dir = exe_path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
-let audio_exists = Path::new(&current_dir).join(audio_path).exists() || Path::new(&exe_dir).join(audio_path).exists();
-let end_exists = Path::new(&current_dir).join(end_path).exists() || Path::new(&exe_dir).join(end_path).exists();
+    // Get the current working directory and executable directory
+    let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let exe_path = env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
+    let exe_dir = exe_path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
 
-if !audio_exists && !end_exists {
-    eprintln!("{}", "Warning: neither 'audio.mp3' nor 'end.mp3' found, using 'audio.mp3' for both.".yellow().bold());
-    thread::sleep(Duration::from_secs(2));
-    run_timer(total_time, audio_path, audio_path, theme)?;
-} else if !audio_exists {
-    eprintln!("{}", "Error: 'audio.mp3' not found!".red().bold());
-    return Err("audio.mp3 not found".into());
-} else if !end_exists {
-    eprintln!("{}", "Warning: 'end.mp3' not found, using 'audio.mp3' for end sound.".yellow().bold());
-    thread::sleep(Duration::from_secs(2));
-    run_timer(total_time, audio_path, audio_path, theme)?;
-} else {
-    run_timer(total_time, audio_path, end_path, theme)?;
-}
+    // Check if audio and end files exist in the current directory, executable directory, or /usr/local/bin
+    let audio_exists = check_audio_exists(&current_dir, &exe_dir, audio_path);
+    let end_exists = check_audio_exists(&current_dir, &exe_dir, end_path);
+
+    // Handling missing files and selecting audio files
+    if !audio_exists && !end_exists {
+        eprintln!("{}", "Warning: neither 'audio.mp3' nor 'end.mp3' found, using 'audio.mp3' for both.".yellow().bold());
+        thread::sleep(Duration::from_secs(2));
+        run_timer(total_time, audio_path, audio_path, theme)?;
+    } else if !audio_exists {
+        eprintln!("{}", "Error: 'audio.mp3' not found!".red().bold());
+        return Err("audio.mp3 not found".into());
+    } else if !end_exists {
+        eprintln!("{}", "Warning: 'end.mp3' not found, using 'audio.mp3' for end sound.".yellow().bold());
+        thread::sleep(Duration::from_secs(2));
+        run_timer(total_time, audio_path, audio_path, theme)?;
+    } else {
+        run_timer(total_time, audio_path, end_path, theme)?;
+    }
 
     Ok(())
 }
+
+// Function to check if audio exists in the current dir, executable dir, or /usr/local/bin
+fn check_audio_exists(current_dir: &PathBuf, exe_dir: &PathBuf, audio_file: &str) -> bool {
+    let paths_to_check = [
+        current_dir.join(audio_file),
+        exe_dir.join(audio_file),
+        Path::new("/usr/local/bin").join(audio_file),
+    ];
+
+    paths_to_check.iter().any(|path| path.exists())
+}
+
 
 fn parse_arguments(args: &[String]) -> Result<u64, Box<dyn std::error::Error>> {
     let mut total_time = 0u64;
