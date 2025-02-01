@@ -12,52 +12,38 @@ check_download_success() {
     fi
 }
 
-# Check for root privileges
-if [ "$EUID" -ne 0 ]; then
-    echo "This script requires root privileges. Please run as root or use sudo."
-    exit 1
+# Function to download a file
+download_file() {
+    local url=$1
+    local destination=$2
+    echo "Downloading $url..."
+    curl -L -o "$destination" "$url"
+    check_download_success "$destination"
+}
+
+# Create ~/jimmer directory if it doesn't exist
+USER_HOME=$(eval echo ~$SUDO_USER)
+JIMMER_DIR="$USER_HOME/jimmer"
+if [ ! -d "$JIMMER_DIR" ]; then
+    echo "Creating $JIMMER_DIR directory..."
+    mkdir -p "$JIMMER_DIR"
 fi
 
-# Create /usr/local/bin if it doesn't exist
-if [ ! -d "/usr/local/bin" ]; then
-    echo "Creating /usr/local/bin directory..."
-    sudo mkdir -p /usr/local/bin
+# Download the audio file to the ~/jimmer directory
+MP3_FILE="$JIMMER_DIR/audio.mp3"
+if [ ! -f "$MP3_FILE" ]; then
+    download_file "$MP3_URL" "$MP3_FILE"
 fi
 
-# Remove existing jimmer binary and audio file if they already exist
-if [ -f "/usr/local/bin/jimmer" ]; then
-    echo "Removing existing jimmer binary at /usr/local/bin/jimmer..."
-    sudo rm /usr/local/bin/jimmer
+# Check if the jimmer binary exists in /usr/local/bin
+if [ ! -f "/usr/local/bin/jimmer" ]; then
+    # Prompt for root privileges to install the jimmer binary
+    echo "The jimmer binary is not installed. Installing to /usr/local/bin..."
+    sudo curl -L -o /usr/local/bin/jimmer "$JIMMER_URL"
+    sudo chmod +x /usr/local/bin/jimmer
+    echo "jimmer has been installed to /usr/local/bin."
+else
+    echo "jimmer is already installed at /usr/local/bin."
 fi
 
-if [ -f "/usr/local/bin/audio.mp3" ]; then
-    echo "Removing existing audio file at /usr/local/bin/audio.mp3..."
-    sudo rm /usr/local/bin/audio.mp3
-fi
-
-# Download the jimmer binary
-echo "Downloading jimmer from $JIMMER_URL..."
-tmp_file=$(mktemp)
-sudo curl -L -o "$tmp_file" "$JIMMER_URL"
-
-# Check if the download was successful
-check_download_success "$tmp_file"
-
-# Move the downloaded jimmer binary to /usr/local/bin and make it executable
-echo "Installing jimmer to /usr/local/bin..."
-sudo mv "$tmp_file" /usr/local/bin/jimmer
-sudo chmod +x /usr/local/bin/jimmer
-
-# Download the audio file
-echo "Downloading audio file from $MP3_URL..."
-mp3_tmp_file=$(mktemp)
-sudo curl -L -o "$mp3_tmp_file" "$MP3_URL"
-
-# Check if the download was successful
-check_download_success "$mp3_tmp_file"
-
-# Move the downloaded audio file to /usr/local/bin
-echo "Installing audio file to /usr/local/bin..."
-sudo mv "$mp3_tmp_file" /usr/local/bin/audio.mp3
-
-echo "Installation completed. 'jimmer' and 'audio.mp3' have been installed to /usr/local/bin."
+echo "Installation completed. 'jimmer' has been installed to /usr/local/bin and 'audio.mp3' to $USER_HOME/jimmer."

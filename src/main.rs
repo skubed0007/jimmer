@@ -1,5 +1,10 @@
 use std::{
-    env, fs::File, io::BufReader, path::{Path, PathBuf}, thread, time::{Duration, Instant}
+    env,
+    fs::File,
+    io::{self, BufRead, BufReader, Write},
+    path::{Path, PathBuf},
+    thread,
+    time::{Duration, Instant},
 };
 
 use crossterm::{
@@ -16,7 +21,8 @@ use tui::{
     Terminal,
 };
 use colored::Colorize;
-use rand::{rng, seq::IndexedRandom};
+use rand::seq::{IndexedRandom, SliceRandom};
+use rand::thread_rng;
 use rodio::{Decoder, OutputStream, Sink};
 
 const QUOTES: &[&str] = &[
@@ -86,26 +92,12 @@ const QUOTES: &[&str] = &[
     "Later the painted smile fades, later authentic strength pervades",
     "Later the comforting lie deceives, later harsh truth relieves",
     "Later the sweet illusion shatters, later reality truly matters",
-    "Later the fleeting pleasure wanes, later lasting purpose sustains",
-    "Later the borrowed identity cracks, later true self enacts",
-    "Later the whispered promise breaks, later the silent vow awakes",
-    "Later the fleeting beauty decays, later inner strength displays",
-    "Later the comforting lie unwinds, later truth's harsh light blinds",
-    "Later the sweet delusion ends, later reality transcends",
-    "Later the painted world cracks, later the true world attacks",
-    "Later the soft illusion shatters, later the stark truth matters",
-    "Later the fleeting joy subsides, later deep purpose guides",
-    "Later the borrowed strength wanes, later true power sustains",
-    "Later the hollow praise rings hollow, later self-belief will follow",
-    "Later the fleeting glimpse fades, later lasting vision pervades",
-    "Later the sugar-coated dream sours, later true potential flowers",
-    "Later the borrowed time runs out, later true self cries out",
-    "Later the painted smile fades, later authentic strength pervades",
-    "Later the comforting lie deceives, later harsh truth relieves",
-    "Later the sweet illusion shatters, later reality truly matters",
 ];
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
+    println!("Debug: Arguments received: {:?}", args);
+
     if args.contains(&"-h".to_string()) || args.contains(&"--help".to_string()) {
         print_help();
         return Ok(());
@@ -119,48 +111,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let theme = get_theme_from_args(&args)?;
 
-    let audio_path = "audio.mp3";
-    let end_path = "end.mp3";
+    // Get the current directory.
+    let current_dir = env::current_dir().map_err(|e| {
+        eprintln!("{}", format!("Error: Failed to get current directory: {}", e).red().bold());
+        e
+    })?;
 
-    // Get the current working directory and executable directory
-    let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let exe_path = env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
-    let exe_dir = exe_path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+    // Try to find audio files: check current directory first, then ~/jimmer.
+    let audio_path = find_audio_file(&current_dir, "audio.mp3");
+    let end_path = find_audio_file(&current_dir, "end.mp3");
 
-    // Check if audio and end files exist in the current directory, executable directory, or /usr/local/bin
-    let audio_exists = check_audio_exists(&current_dir, &exe_dir, audio_path);
-    let end_exists = check_audio_exists(&current_dir, &exe_dir, end_path);
-
-    // Handling missing files and selecting audio files
-    if !audio_exists && !end_exists {
-        eprintln!("{}", "Warning: neither 'audio.mp3' nor 'end.mp3' found, using 'audio.mp3' for both.".yellow().bold());
-        thread::sleep(Duration::from_secs(2));
-        run_timer(total_time, audio_path, audio_path, theme)?;
-    } else if !audio_exists {
-        eprintln!("{}", "Error: 'audio.mp3' not found!".red().bold());
-        return Err("audio.mp3 not found".into());
-    } else if !end_exists {
-        eprintln!("{}", "Warning: 'end.mp3' not found, using 'audio.mp3' for end sound.".yellow().bold());
-        thread::sleep(Duration::from_secs(2));
-        run_timer(total_time, audio_path, audio_path, theme)?;
-    } else {
-        run_timer(total_time, audio_path, end_path, theme)?;
+    if audio_path.is_none() && end_path.is_none() {
+        eprintln!("{}", "Error: Neither 'audio.mp3' nor 'end.mp3' found in current directory or ~/jimmer".red().bold());
+        return Err("No audio files found".into());
     }
 
+    // If one file is missing, use the other for both loop and end sounds.
+    let loop_path = if let Some(ref audio) = audio_path { audio } else { end_path.as_ref().unwrap() };
+    let end_path_final = if let Some(ref end) = end_path { end } else { audio_path.as_ref().unwrap() };
+
+    run_timer(total_time, loop_path.to_str().unwrap(), end_path_final.to_str().unwrap(), theme)?;
     Ok(())
 }
 
-// Function to check if audio exists in the current dir, executable dir, or /usr/local/bin
-fn check_audio_exists(current_dir: &PathBuf, exe_dir: &PathBuf, audio_file: &str) -> bool {
-    let paths_to_check = [
-        current_dir.join(audio_file),
-        exe_dir.join(audio_file),
-        Path::new("/usr/local/bin").join(audio_file),
-    ];
-
-    paths_to_check.iter().any(|path| path.exists())
+fn find_audio_file(current_dir: &PathBuf, audio_file: &str) -> Option<PathBuf> {
+    let candidate = current_dir.join(audio_file);
+    if candidate.exists() {
+        return Some(candidate);
+    }
+    if let Ok(home) = env::var("HOME") {
+        let candidate = Path::new(&home).join("jimmer").join(audio_file);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
 }
-
 
 fn parse_arguments(args: &[String]) -> Result<u64, Box<dyn std::error::Error>> {
     let mut total_time = 0u64;
@@ -179,19 +165,21 @@ fn get_theme_from_args(args: &[String]) -> Result<usize, Box<dyn std::error::Err
         if let Some(value) = arg.strip_prefix("--theme=") {
             let theme = value.parse::<usize>()?;
             if theme >= 1 && theme <= 10 {
-                return Ok(theme - 1); // Convert to 0-based index
+                return Ok(theme - 1);
             }
         }
     }
-    Ok(0) // Default to theme 0
+    Ok(0)
 }
 
 fn run_timer(total_time: u64, loop_sound: &str, end_sound: &str, theme: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
+        .map_err(|e| format!("Failed to enter alternate screen: {}", e))?;
+    enable_raw_mode().map_err(|e| format!("Failed to enable raw mode: {}", e))?;
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = Terminal::new(backend)
+        .map_err(|e| format!("Failed to create terminal: {}", e))?;
 
     let start_time = Instant::now();
     let mut paused = false;
@@ -199,12 +187,17 @@ fn run_timer(total_time: u64, loop_sound: &str, end_sound: &str, theme: usize) -
     let mut total_paused = 0u64;
     let mut remaining = total_time;
     let mut last_quote_change = Instant::now();
-    let mut current_quote = QUOTES.choose(&mut rng()).unwrap();
-    
-    let (_stream, stream_handle) = OutputStream::try_default()?;
-    let sink = Sink::try_new(&stream_handle)?;
-    let file = BufReader::new(File::open(loop_sound)?);
-    let source = Decoder::new(file)?;
+    let mut rng = thread_rng();
+    let mut current_quote = QUOTES.choose(&mut rng).ok_or("No quotes available")?;
+
+    let (_stream, stream_handle) = OutputStream::try_default()
+        .map_err(|e| format!("Failed to get audio output stream: {}", e))?;
+    let sink = Sink::try_new(&stream_handle)
+        .map_err(|e| format!("Failed to create audio sink: {}", e))?;
+    let file = BufReader::new(File::open(loop_sound)
+        .map_err(|e| format!("Failed to open loop sound file '{}': {}", loop_sound, e))?);
+    let source = Decoder::new(file)
+        .map_err(|e| format!("Failed to decode loop sound file '{}': {}", loop_sound, e))?;
     sink.append(source);
     sink.set_volume(0.5);
     sink.play();
@@ -241,13 +234,12 @@ fn run_timer(total_time: u64, loop_sound: &str, end_sound: &str, theme: usize) -
             f.render_widget(timer, chunks[0]);
             f.render_widget(quote_widget, chunks[1]);
             f.render_widget(help, chunks[2]);
-        })?;
+        }).map_err(|e| format!("Failed to draw terminal: {}", e))?;
 
-        if event::poll(Duration::from_millis(50))? {
-            if let Event::Key(key_event) = event::read()? {
+        if event::poll(Duration::from_millis(50)).map_err(|e| format!("Event poll error: {}", e))? {
+            if let Event::Key(key_event) = event::read().map_err(|e| format!("Failed to read event: {}", e))? {
                 match key_event.code {
                     KeyCode::Char('p') => {
-                        // Pause or resume the timer
                         if paused {
                             total_paused += pause_start.elapsed().as_millis() as u64;
                         } else {
@@ -266,9 +258,12 @@ fn run_timer(total_time: u64, loop_sound: &str, end_sound: &str, theme: usize) -
             remaining = total_time.saturating_sub(elapsed - total_paused);
             if remaining == 0 {
                 sink.stop();
-                let sink = Sink::try_new(&stream_handle)?;
-                let file = BufReader::new(File::open(end_sound)?);
-                let source = Decoder::new(file)?;
+                let sink = Sink::try_new(&stream_handle)
+                    .map_err(|e| format!("Failed to create end sound sink: {}", e))?;
+                let file = BufReader::new(File::open(end_sound)
+                    .map_err(|e| format!("Failed to open end sound file '{}': {}", end_sound, e))?);
+                let source = Decoder::new(file)
+                    .map_err(|e| format!("Failed to decode end sound file '{}': {}", end_sound, e))?;
                 sink.append(source);
                 sink.set_volume(2.0);
                 sink.play();
@@ -283,21 +278,22 @@ fn run_timer(total_time: u64, loop_sound: &str, end_sound: &str, theme: usize) -
                     .block(block)
                     .alignment(Alignment::Center);
                     f.render_widget(paragraph, size);
-                })?;
-                let _ = event::read()?;
+                }).map_err(|e| format!("Failed to draw final screen: {}", e))?;
+                let _ = event::read().map_err(|e| format!("Failed to read event at end: {}", e))?;
                 break;
             }
         }
 
         if last_quote_change.elapsed() >= Duration::from_secs(5) {
-            current_quote = QUOTES.choose(&mut rng()).unwrap();
+            current_quote = QUOTES.choose(&mut rng).ok_or("No quotes available")?;
             last_quote_change = Instant::now();
         }
     }
 
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
-    terminal.show_cursor()?;
+    disable_raw_mode().map_err(|e| format!("Failed to disable raw mode: {}", e))?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)
+        .map_err(|e| format!("Failed to leave alternate screen: {}", e))?;
+    terminal.show_cursor().map_err(|e| format!("Failed to show cursor: {}", e))?;
     Ok(())
 }
 
@@ -338,6 +334,7 @@ fn get_quote_style(theme: usize) -> Style {
         _ => Style::default().fg(Color::White).add_modifier(Modifier::ITALIC),
     }
 }
+
 fn print_help() {
     println!("Usage: jimmer [options]");
     println!("\nOptions:");
@@ -353,5 +350,6 @@ fn print_help() {
     println!("  - 'audio.mp3' will be played in a loop during the timer.");
     println!("  - 'end.mp3' will play when the timer ends.");
     println!("\nNote:");
-    println!("  - the timer will look for \"audio.mp3\" for loop and \"end.mp3\" for end sound");
+    println!("  - The timer will look for \"audio.mp3\" and \"end.mp3\" in the current directory first,");
+    println!("    then in ~/jimmer. If one is missing, it will use the other for both sounds.");
 }
